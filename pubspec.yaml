@@ -1,0 +1,30 @@
+name: universal_edu_app
+description: A platform for universal and personalized education.
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  file_picker: ^6.1.1
+  provider: ^6.1.1
+  firebase_core: ^2.24.0
+  firebase_auth: ^4.18.0
+  cloud_firestore: ^4.17.0
+  firebase_storage: ^11.7.0
+  google_sign_in: ^6.2.1
+  http: ^0.13.6
+  
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/

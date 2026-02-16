@@ -1,0 +1,18 @@
+universal_learning_platform_full_starter/
+├─ README.md
+├─ flutterflow-instructions.md
+├─ firestore-schema.json
+├─ prompts/
+│   ├─ mcq_basic.txt
+│   ├─ flashcards_basic.txt
+│   └─ summary_quiz.txt
+├─ backend/
+│   └─ functions/
+│       ├─ package.json
+│       ├─ index.js
+│       └─ README.md
+├─ backend/README_API.md
+├─ frontend/README.md
+├─ assets/
+│   └─ logo_base64.txt
+└─ CHANGELOG.md
