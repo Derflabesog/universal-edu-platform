@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Universal Edu Platform</title>
+  </head>
+  <body style="font-family: system-ui; padding: 24px;">
+    <h1>Universal Edu Platform</h1>
+    <p>Status: Hosting is live ✅</p>
+
+    <button id="btn" style="padding:10px 14px;border:1px solid #ccc;border-radius:8px;cursor:pointer;">
+      Test Backend (ping)
+    </button>
+
+    <pre id="out" style="margin-top:14px;background:#f6f8fa;padding:12px;border-radius:8px;white-space:pre-wrap;"></pre>
+
+    <script>
+      const out = document.getElementById('out');
+      document.getElementById('btn').addEventListener('click', async () => {
+        out.textContent = "Calling backend...";
+        try {
+          const res = await fetch("https://us-central1-universal-edu-platform.cloudfunctions.net/ping");
+          const data = await res.json();
+          out.textContent = JSON.stringify(data, null, 2);
+        } catch (e) {
+          out.textContent = "Error: " + e;
+        }
+      });
+    </script>
+  </body>
+</html>
