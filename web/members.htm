@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Members | Universal Edu Platform</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+
+<body>
+
+<header>
+  <div>
+    <div class="brand">Universal Edu Platform</div>
+    <div class="muted" style="font-size:13px;">Course Members</div>
+  </div>
+
+  <div class="row">
+    <a class="btn ghost" id="btnBack" href="/app.html">← Back</a>
+    <a class="btn ghost" href="/index.html">Home</a>
+    <button class="btn danger" id="btnLogout">Logout</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div id="noCourse" class="card" style="display:none;">
+    <h2>Missing courseId</h2>
+    <p class="muted">Open this page from a course.</p>
+    <a class="btn" href="/app.html">Go to Dashboard</a>
+  </div>
+
+  <div id="main" style="display:none;">
+
+    <section class="card">
+      <div class="split">
+        <div>
+          <h1 id="courseTitle">Loading...</h1>
+          <div id="courseDesc" class="muted"></div>
+          <div class="note" id="roleNote" style="margin-top:8px;">Loading…</div>
+        </div>
+        <span class="pill" id="userPill">Checking session...</span>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="grid" style="grid-template-columns:1fr 1fr;">
+        <div class="item">
+          <div class="muted" style="font-size:12px;">Join Code</div>
+          <div style="font-weight:900; font-size:20px;" id="joinCodeText">—</div>
+          <div class="row" style="margin-top:10px;">
+            <button class="btn" id="btnCopyCode">Copy Code</button>
+            <button class="btn ghost" id="btnCopyInviteLink">Copy Invite Link</button>
+          </div>
+          <div class="note" style="margin-top:10px;">
+            Share this code with students so they can join the course.
+          </div>
+        </div>
+
+        <div class="item">
+          <div class="muted" style="font-size:12px;">Members</div>
+          <div style="font-weight:900; font-size:20px;" id="memberCount">0</div>
+          <div class="note" style="margin-top:10px;">
+            Teachers can remove students from this course.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:20px;">
+      <div class="split">
+        <h2>Enrolled Students</h2>
+        <div class="row">
+          <input id="search" placeholder="Search members…" style="max-width:260px;" />
+          <button class="btn ghost" id="btnRefresh">Refresh</button>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div id="list" class="list">
+        <div class="item muted">Loading…</div>
+      </div>
+
+      <div class="hr"></div>
+
+      <pre id="out" class="item" style="white-space:pre-wrap;">Ready.</pre>
+    </section>
+
+  </div>
+
+</div>
+
+<script type="module">
+  import { auth, db } from "./firebase.js";
+  import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+  import {
+    doc, getDoc, collection, onSnapshot, query, where, deleteDoc
+  } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+  const courseId = new URL(location.href).searchParams.get("courseId");
+
+  const noCourse = document.getElementById("noCourse");
+  const main = document.getElementById("main");
+
+  const userPill = document.getElementById("userPill");
+  const roleNote = document.getElementById("roleNote");
+  const btnLogout = document.getElementById("btnLogout");
+
+  const courseTitleEl = document.getElementById("courseTitle");
+  const courseDescEl  = document.getElementById("courseDesc");
+
+  const joinCodeText = document.getElementById("joinCodeText");
+  const btnCopyCode = document.getElementById("btnCopyCode");
+  const btnCopyInviteLink = document.getElementById("btnCopyInviteLink");
+
+  const memberCount = document.getElementById("memberCount");
+  const list = document.getElementById("list");
+  const out = document.getElementById("out");
+
+  const search = document.getElementById("search");
+  const btnRefresh = document.getElementById("btnRefresh");
+
+  let uid = null;
+  let role = "student";
+  let members = [];
+  let joinCode = null;
+
+  const say = (m)=> out.textContent = m;
+  const esc = (s="") => String(s).replace(/[<>&]/g, "");
+
+  if (!courseId){
+    noCourse.style.display = "block";
+  }
+
+  btnLogout.addEventListener("click", async ()=>{
+    await signOut(auth);
+    location.href = "/auth.html";
+  });
+
+  onAuthStateChanged(auth, async (user)=>{
+    if (!user){
+      location.href = "/auth.html";
+      return;
+    }
+    if (!courseId) return;
+
+    uid = user.uid;
+    userPill.textContent = user.email || "Signed in";
+
+    // load role
+    const uSnap = await getDoc(doc(db, "users", uid));
+    role = uSnap.exists() ? (uSnap.data().role || "student") : "student";
+
+    if (role !== "teacher"){
+      roleNote.textContent = "Student mode: you cannot manage members.";
+      alert("Only teachers can view/manage members.");
+      location.href = "/app.html";
+      return;
+    }
+
+    roleNote.textContent = "Teacher mode: manage enrolled students.";
+    main.style.display = "block";
+
+    await loadCourse();
+    await loadJoinCode();
+    listenMembers();
+  });
+
+  async function loadCourse(){
+    const snap = await getDoc(doc(db, "courses", courseId));
+    if (!snap.exists()){
+      courseTitleEl.textContent = "Course not found";
+      courseDescEl.textContent = "";
+      return;
+    }
+    const c = snap.data();
+    courseTitleEl.textContent = c.title || "Untitled";
+    courseDescEl.textContent = c.description || "No description.";
+  }
+
+  async function loadJoinCode(){
+    // find invite doc that matches this course
+    const q = query(collection(db, "course_invites"), where("courseId", "==", courseId));
+    onSnapshot(q, (snap)=>{
+      if (!snap.docs.length){
+        joinCode = null;
+        joinCodeText.textContent = "No code found";
+        return;
+      }
+      const d = snap.docs[0].data();
+      joinCode = d.code || snap.docs[0].id;
+      joinCodeText.textContent = joinCode;
+    }, (err)=>{
+      joinCodeText.textContent = "Error";
+      say("Error loading join code: " + (err?.message || err));
+    });
+  }
+
+  function listenMembers(){
+    const col = collection(db, "courses", courseId, "members");
+
+    onSnapshot(col, (snap)=>{
+      members = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+
+      // show only students for this page
+      members = members.filter(m => (m.role || "") !== "teacher");
+
+      memberCount.textContent = String(members.length);
+      renderMembers();
+    }, (err)=>{
+      list.innerHTML = `<div class="item">Error: ${esc(err?.message || err)}</div>`;
+      say("Error: " + (err?.message || err));
+    });
+  }
+
+  function renderMembers(){
+    const qtxt = (search.value || "").trim().toLowerCase();
+
+    const filtered = members.filter(m=>{
+      const id = (m.id || "").toLowerCase();
+      const em = (m.email || "").toLowerCase();
+      return !qtxt || id.includes(qtxt) || em.includes(qtxt);
+    });
+
+    if (!filtered.length){
+      list.innerHTML = `<div class="item muted">No students enrolled yet.</div>`;
+      return;
+    }
+
+    list.innerHTML = filtered.map(m=>{
+      const uid = esc(m.id);
+      const email = esc(m.email || "");
+      const joined = m.joinedAt?.toDate ? m.joinedAt.toDate().toLocaleString() : "—";
+
+      return `
+        <div class="item">
+          <div class="split">
+            <div style="min-width:0;">
+              <div style="font-weight:900;">Student UID</div>
+              <div class="muted" style="margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                ${uid}
+              </div>
+              ${email ? `<div class="note" style="margin-top:6px;">Email: ${email}</div>` : ``}
+              <div class="note" style="margin-top:6px;">Joined: ${esc(joined)}</div>
+            </div>
+            <div class="row">
+              <button class="btn danger" data-kick="${uid}">Remove</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    list.querySelectorAll("[data-kick]").forEach(btn=>{
+      btn.addEventListener("click", ()=>kick(btn.getAttribute("data-kick")));
+    });
+  }
+
+  async function kick(studentUid){
+    const ok = confirm("Remove this student from the course?");
+    if (!ok) return;
+
+    try{
+      // Remove membership (course side)
+      await deleteDoc(doc(db, "courses", courseId, "members", studentUid));
+
+      // NOTE: we cannot delete users/{uid}/enrollments/{courseId} because rules block cross-user edits.
+      // Student enrollment doc will remain, but they won't have access anymore because membership is removed.
+      say("Student removed ✅");
+    } catch(e){
+      alert(e?.message || e);
+      say("Error: " + (e?.message || e));
+    }
+  }
+
+  btnCopyCode.addEventListener("click", async ()=>{
+    if (!joinCode) return alert("No join code found.");
+    await navigator.clipboard.writeText(joinCode);
+    alert("Copied join code ✅");
+  });
+
+  btnCopyInviteLink.addEventListener("click", async ()=>{
+    if (!joinCode) return alert("No join code found.");
+    const link = location.origin + "/auth.html?code=" + encodeURIComponent(joinCode);
+    await navigator.clipboard.writeText(link);
+    alert("Copied invite link ✅");
+  });
+
+  search.addEventListener("input", renderMembers);
+  btnRefresh.addEventListener("click", renderMembers);
+
+  say("Ready.");
+</script>
+
+</body>
+</html>

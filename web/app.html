@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>App | Universal Edu Platform</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+
+<body>
+
+<header>
+  <div>
+    <div class="brand">Universal Edu Platform</div>
+    <div class="muted" style="font-size:13px;">Course Dashboard</div>
+  </div>
+
+  <div class="row">
+    <a class="btn ghost" href="/index.html">Home</a>
+    <a class="btn ghost" href="/auth.html">Auth</a>
+    <button class="btn danger" id="btnLogout">Logout</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="grid" style="grid-template-columns: 1.2fr .8fr;">
+    <!-- LEFT -->
+    <div class="card">
+      <div class="split">
+        <h1 style="font-size:28px;">Dashboard</h1>
+        <span class="pill" id="userPill">Checking session…</span>
+      </div>
+
+      <p class="muted" style="margin-top:10px; line-height:1.6;" id="roleNote">Loading...</p>
+
+      <div class="hr"></div>
+
+      <!-- TEACHER -->
+      <div id="teacherPanel" style="display:none;">
+        <h3>Create a new course</h3>
+
+        <label class="muted" for="courseTitle" style="margin-top:10px;">Course title</label>
+        <input id="courseTitle" placeholder="e.g. Grade 10 Biology" />
+
+        <label class="muted" for="courseDesc" style="margin-top:10px;">Short description (optional)</label>
+        <textarea id="courseDesc" rows="3" placeholder="What is this course about?"></textarea>
+
+        <div class="row" style="margin-top:12px;">
+          <button class="btn" id="btnCreate">Create Course</button>
+          <button class="btn ghost" id="btnClear">Clear</button>
+        </div>
+
+        <div class="note" style="margin-top:12px;">
+          After creating, the system generates a <b>Join Code</b> you can share with students.
+        </div>
+
+        <div class="hr"></div>
+      </div>
+
+      <!-- STUDENT -->
+      <div id="studentPanel" style="display:none;">
+        <h3>Join a course</h3>
+
+        <label class="muted" for="joinCode" style="margin-top:10px;">Course join code</label>
+        <input id="joinCode" placeholder="e.g. AB12CD34" maxlength="12" />
+
+        <div class="row" style="margin-top:12px;">
+          <button class="btn" id="btnJoin">Join Course</button>
+          <button class="btn ghost" id="btnJoinClear">Clear</button>
+        </div>
+
+        <div class="note" style="margin-top:12px;">
+          Ask your teacher for the join code.
+        </div>
+
+        <div class="hr"></div>
+      </div>
+
+      <pre id="out" class="item" style="white-space:pre-wrap;">Ready.</pre>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="card">
+      <h2 style="margin-bottom:6px;">Quick Overview</h2>
+      <p class="muted" style="line-height:1.6;">
+        Teachers create courses. Students join using a code — no index needed.
+      </p>
+
+      <div class="hr"></div>
+
+      <div class="grid" style="grid-template-columns:1fr 1fr;">
+        <div class="item">
+          <div class="muted" style="font-size:12px;">Total Courses</div>
+          <div style="font-size:26px; font-weight:900;" id="statCourses">0</div>
+        </div>
+        <div class="item">
+          <div class="muted" style="font-size:12px;">Role</div>
+          <div style="font-size:16px; font-weight:900;" id="statRole">—</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="margin-top:22px;">
+    <div class="card">
+      <div class="split">
+        <h2 id="listTitle">Courses</h2>
+        <div class="row">
+          <input id="search" placeholder="Search courses…" style="max-width:260px;" />
+          <button class="btn ghost" id="btnRefresh">Refresh</button>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div id="list" class="list">
+        <div class="item muted">Loading…</div>
+      </div>
+
+      <div class="note" style="margin-top:12px;">
+        Click <b>Open</b> to manage/view lessons. Teachers can also open <b>Members</b>.
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script type="module">
+  import { auth, db } from "./firebase.js";
+  import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+  import {
+    collection, doc, addDoc, setDoc, deleteDoc, getDoc,
+    onSnapshot, query, where, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+  const userPill = document.getElementById("userPill");
+  const btnLogout = document.getElementById("btnLogout");
+
+  const teacherPanel = document.getElementById("teacherPanel");
+  const studentPanel = document.getElementById("studentPanel");
+
+  const roleNote = document.getElementById("roleNote");
+  const statRole = document.getElementById("statRole");
+  const statCourses = document.getElementById("statCourses");
+
+  const courseTitle = document.getElementById("courseTitle");
+  const courseDesc = document.getElementById("courseDesc");
+  const btnCreate = document.getElementById("btnCreate");
+  const btnClear = document.getElementById("btnClear");
+
+  const joinCode = document.getElementById("joinCode");
+  const btnJoin = document.getElementById("btnJoin");
+  const btnJoinClear = document.getElementById("btnJoinClear");
+
+  const out = document.getElementById("out");
+  const list = document.getElementById("list");
+  const listTitle = document.getElementById("listTitle");
+
+  const search = document.getElementById("search");
+  const btnRefresh = document.getElementById("btnRefresh");
+
+  let uid = null;
+  let role = "student";
+  let allCourses = [];
+  let unsub = null;
+
+  const say = (m) => out.textContent = m;
+  const esc = (s="") => String(s).replace(/[<>&]/g, "");
+  const fmtDate = (ts) => {
+    try{
+      if (!ts) return "—";
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      return d.toLocaleString();
+    } catch { return "—"; }
+  };
+
+  function makeCode(len=8){
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let s = "";
+    for(let i=0;i<len;i++) s += chars[Math.floor(Math.random()*chars.length)];
+    return s;
+  }
+
+  onAuthStateChanged(auth, async (user) => {
+    if (!user){
+      location.href = "/auth.html";
+      return;
+    }
+
+    uid = user.uid;
+    userPill.textContent = user.email || "Signed in";
+
+    // role from users/{uid}
+    const uSnap = await getDoc(doc(db, "users", uid));
+    role = uSnap.exists() ? (uSnap.data().role || "student") : "student";
+    statRole.textContent = role.toUpperCase();
+
+    if (role === "teacher"){
+      teacherPanel.style.display = "block";
+      studentPanel.style.display = "none";
+      roleNote.textContent = "You are a TEACHER. Create courses and share a join code with students.";
+      listTitle.textContent = "Your Courses";
+      listenTeacherCourses();
+    } else {
+      teacherPanel.style.display = "none";
+      studentPanel.style.display = "block";
+      roleNote.textContent = "You are a STUDENT. Join courses using a code from your teacher.";
+      listTitle.textContent = "Enrolled Courses";
+      listenStudentEnrollments();
+    }
+
+    say("Ready.");
+  });
+
+  btnLogout.addEventListener("click", async () => {
+    await signOut(auth);
+    location.href = "/auth.html";
+  });
+
+  // TEACHER courses
+  function listenTeacherCourses(){
+    if (unsub) unsub();
+    const q = query(collection(db, "courses"), where("uid", "==", uid));
+    unsub = onSnapshot(q, (snap) => {
+      allCourses = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      allCourses.sort((a,b)=>{
+        const ta = a.createdAt?.toMillis?.() || 0;
+        const tb = b.createdAt?.toMillis?.() || 0;
+        return tb - ta;
+      });
+      statCourses.textContent = String(allCourses.length);
+      renderList();
+    }, (err) => {
+      list.innerHTML = `<div class="item">Error: ${esc(err?.message || err)}</div>`;
+    });
+  }
+
+  // STUDENT enrollments
+  function listenStudentEnrollments(){
+    if (unsub) unsub();
+    const q = query(collection(db, "users", uid, "enrollments"));
+    unsub = onSnapshot(q, async (snap) => {
+      const courseIds = snap.docs.map(d => d.id);
+
+      const courses = [];
+      for (const cid of courseIds){
+        const cs = await getDoc(doc(db, "courses", cid));
+        if (cs.exists()) courses.push({ id: cid, ...cs.data() });
+      }
+
+      courses.sort((a,b)=>{
+        const ta = a.createdAt?.toMillis?.() || 0;
+        const tb = b.createdAt?.toMillis?.() || 0;
+        return tb - ta;
+      });
+
+      allCourses = courses;
+      statCourses.textContent = String(allCourses.length);
+      renderList();
+    }, (err) => {
+      list.innerHTML = `<div class="item">Error: ${esc(err?.message || err)}</div>`;
+    });
+  }
+
+  // Create course + invite
+  btnCreate?.addEventListener("click", async ()=>{
+    const title = courseTitle.value.trim();
+    const description = courseDesc.value.trim();
+    if (!title) return alert("Enter a course title.");
+
+    btnCreate.disabled = true;
+    btnCreate.textContent = "Creating...";
+
+    try{
+      const code = makeCode(8);
+
+      const courseRef = await addDoc(collection(db, "courses"), {
+        uid,
+        title,
+        description,
+        createdAt: serverTimestamp()
+      });
+
+      await setDoc(doc(db, "course_invites", code), {
+        code,
+        courseId: courseRef.id,
+        teacherUid: uid,
+        title,
+        createdAt: serverTimestamp()
+      });
+
+      // teacher membership doc
+      await setDoc(doc(db, "courses", courseRef.id, "members", uid), {
+        uid,
+        role: "teacher",
+        joinedAt: serverTimestamp()
+      });
+
+      say(`Course created ✅\nJoin Code: ${code}\nShare this code with students.`);
+      alert("Course created! Join Code: " + code);
+
+      courseTitle.value = "";
+      courseDesc.value = "";
+    } catch(e){
+      alert(e?.message || e);
+      say("Error: " + (e?.message || e));
+    } finally {
+      btnCreate.disabled = false;
+      btnCreate.textContent = "Create Course";
+    }
+  });
+
+  btnClear?.addEventListener("click", ()=>{
+    courseTitle.value=""; courseDesc.value=""; courseTitle.focus();
+  });
+
+  // Student join
+  btnJoin?.addEventListener("click", async ()=>{
+    const code = joinCode.value.trim().toUpperCase();
+    if (!code) return alert("Enter a join code.");
+
+    btnJoin.disabled = true;
+    btnJoin.textContent = "Joining...";
+
+    try{
+      const inviteSnap = await getDoc(doc(db, "course_invites", code));
+      if (!inviteSnap.exists()){
+        alert("Invalid code. Ask your teacher for the correct code.");
+        say("Invalid code.");
+        return;
+      }
+
+      const invite = inviteSnap.data();
+      const courseId = invite.courseId;
+
+      await setDoc(doc(db, "courses", courseId, "members", uid), {
+        uid,
+        role: "student",
+        joinedAt: serverTimestamp()
+      });
+
+      await setDoc(doc(db, "users", uid, "enrollments", courseId), {
+        courseId,
+        joinedAt: serverTimestamp()
+      });
+
+      say(`Joined ✅\nCourse: ${invite.title}\nNow open it from your list.`);
+      alert("Joined course: " + invite.title);
+      joinCode.value = "";
+    } catch(e){
+      alert(e?.message || e);
+      say("Error: " + (e?.message || e));
+    } finally {
+      btnJoin.disabled = false;
+      btnJoin.textContent = "Join Course";
+    }
+  });
+
+  btnJoinClear?.addEventListener("click", ()=>{
+    joinCode.value=""; joinCode.focus();
+  });
+
+  function openCourse(courseId){
+    location.href = "/lesson.html?courseId=" + encodeURIComponent(courseId);
+  }
+
+  function openMembers(courseId){
+    location.href = "/members.html?courseId=" + encodeURIComponent(courseId);
+  }
+
+  async function removeCourse(courseId){
+    if (role !== "teacher") return alert("Only teachers can delete.");
+    const ok = confirm("Delete this course?");
+    if (!ok) return;
+
+    try{
+      await deleteDoc(doc(db, "courses", courseId));
+      say("Deleted ✅");
+    } catch(e){
+      alert(e?.message || e);
+      say("Error: " + (e?.message || e));
+    }
+  }
+
+  function renderList(){
+    const qtxt = (search.value || "").trim().toLowerCase();
+    const filtered = allCourses.filter(c=>{
+      const t = (c.title||"").toLowerCase();
+      const d = (c.description||"").toLowerCase();
+      return !qtxt || t.includes(qtxt) || d.includes(qtxt);
+    });
+
+    if (!filtered.length){
+      list.innerHTML = `<div class="item muted">No courses yet.</div>`;
+      return;
+    }
+
+    list.innerHTML = filtered.map(c=>{
+      const title = esc(c.title||"Untitled");
+      const desc = esc(c.description||"");
+      const created = fmtDate(c.createdAt);
+
+      return `
+        <div class="item">
+          <div class="split">
+            <div style="min-width:0;">
+              <div style="font-weight:900; font-size:16px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                ${title}
+              </div>
+              <div class="muted" style="margin-top:4px; line-height:1.4;">
+                ${desc ? desc : "No description."}
+              </div>
+              <div class="note" style="margin-top:6px;">Created: ${esc(created)}</div>
+            </div>
+            <div class="row">
+              <button class="btn" data-open="${c.id}">Open</button>
+              ${role === "teacher" ? `<button class="btn ghost" data-mem="${c.id}">Members</button>` : ``}
+              ${role === "teacher" ? `<button class="btn danger" data-del="${c.id}">Delete</button>` : ``}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    list.querySelectorAll("[data-open]").forEach(b=>{
+      b.addEventListener("click", ()=>openCourse(b.getAttribute("data-open")));
+    });
+
+    list.querySelectorAll("[data-mem]").forEach(b=>{
+      b.addEventListener("click", ()=>openMembers(b.getAttribute("data-mem")));
+    });
+
+    list.querySelectorAll("[data-del]").forEach(b=>{
+      b.addEventListener("click", ()=>removeCourse(b.getAttribute("data-del")));
+    });
+  }
+
+  search.addEventListener("input", renderList);
+  btnRefresh.addEventListener("click", renderList);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In | Universal Edu Platform</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+
+<body>
+
+<header>
+  <div>
+    <div class="brand">Universal Edu Platform</div>
+    <div class="muted" style="font-size:13px;">Global Learning for Everyone 🌍</div>
+  </div>
+  <div class="row">
+    <a class="btn ghost" href="/index.html">Back</a>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="grid" style="grid-template-columns: 1fr 1fr;">
+    <div class="card">
+      <h1 style="font-size:34px;">Welcome</h1>
+      <p class="muted" style="margin-top:12px; line-height:1.6;">
+        Sign in to access your dashboard. Teachers create courses and lessons. Students join via code.
+      </p>
+
+      <div class="hr"></div>
+
+      <h3>Roles</h3>
+      <ul class="muted" style="line-height:1.8; margin-top:10px;">
+        <li>• <b>Teacher</b> — create & manage courses/lessons</li>
+        <li>• <b>Student</b> — join courses, view lessons (no editing)</li>
+      </ul>
+
+      <div class="note" style="margin-top:14px;">
+        Tip: You can switch your role in Firestore: <b>users/{uid}.role</b>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="split">
+        <h2 id="formTitle">Sign In</h2>
+        <span class="pill" id="modePill">Login</span>
+      </div>
+
+      <div class="muted" style="margin-bottom:12px;">
+        Use email/password or Google.
+      </div>
+
+      <button class="btn ghost" id="btnGoogle" style="width:100%; justify-content:center;">
+        <span style="font-weight:900;">G</span> Continue with Google
+      </button>
+
+      <div class="hr"></div>
+
+      <label class="muted" for="email">Email</label>
+      <input id="email" type="email" placeholder="you@example.com" autocomplete="email" />
+
+      <label class="muted" for="password" style="margin-top:12px;">Password</label>
+      <input id="password" type="password" placeholder="Your password" autocomplete="current-password" />
+
+      <div id="roleBox" style="display:none; margin-top:12px;">
+        <label class="muted">Choose role for this new account</label>
+        <div class="row" style="margin-top:8px;">
+          <label class="pill"><input type="radio" name="role" value="student" checked> Student</label>
+          <label class="pill"><input type="radio" name="role" value="teacher"> Teacher</label>
+        </div>
+        <div class="note" style="margin-top:8px;">Role can be changed later in Firestore.</div>
+      </div>
+
+      <div class="row" style="margin-top:14px;">
+        <button class="btn" id="btnSubmit">Sign In</button>
+        <button class="btn ghost" id="btnToggleMode">Create Account</button>
+      </div>
+
+      <div class="row" style="margin-top:12px;">
+        <button class="btn ghost" id="btnForgot">Forgot Password</button>
+        <a class="btn ghost" href="/index.html">Home</a>
+      </div>
+
+      <div class="hr"></div>
+      <pre id="out">Ready.</pre>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+  import { auth, db } from "./firebase.js";
+  import {
+    onAuthStateChanged,
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    sendPasswordResetEmail,
+    GoogleAuthProvider,
+    signInWithPopup
+  } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+
+  import {
+    doc, getDoc, setDoc, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+  const emailEl = document.getElementById("email");
+  const passEl = document.getElementById("password");
+  const out = document.getElementById("out");
+
+  const formTitle = document.getElementById("formTitle");
+  const modePill = document.getElementById("modePill");
+  const btnSubmit = document.getElementById("btnSubmit");
+  const btnToggleMode = document.getElementById("btnToggleMode");
+  const btnForgot = document.getElementById("btnForgot");
+  const btnGoogle = document.getElementById("btnGoogle");
+  const roleBox = document.getElementById("roleBox");
+
+  let mode = "login"; // login | register
+  const say = (msg) => out.textContent = msg;
+
+  async function ensureUserDoc(user, roleDefault="student"){
+    const ref = doc(db, "users", user.uid);
+    const snap = await getDoc(ref);
+    if (!snap.exists()){
+      await setDoc(ref, {
+        role: roleDefault,
+        email: user.email || "",
+        createdAt: serverTimestamp()
+      });
+    }
+  }
+
+  onAuthStateChanged(auth, async (user) => {
+    if (user){
+      await ensureUserDoc(user, "student");
+      location.href = "/app.html";
+    }
+  });
+
+  function getSelectedRole(){
+    const el = document.querySelector('input[name="role"]:checked');
+    return el ? el.value : "student";
+  }
+
+  function setMode(nextMode){
+    mode = nextMode;
+    if (mode === "login"){
+      formTitle.textContent = "Sign In";
+      modePill.textContent = "Login";
+      btnSubmit.textContent = "Sign In";
+      btnToggleMode.textContent = "Create Account";
+      passEl.autocomplete = "current-password";
+      roleBox.style.display = "none";
+      say("Ready.");
+    } else {
+      formTitle.textContent = "Create Account";
+      modePill.textContent = "Register";
+      btnSubmit.textContent = "Create Account";
+      btnToggleMode.textContent = "I already have an account";
+      passEl.autocomplete = "new-password";
+      roleBox.style.display = "block";
+      say("Choose a role and create account.");
+    }
+  }
+
+  btnToggleMode.addEventListener("click", () => {
+    setMode(mode === "login" ? "register" : "login");
+  });
+
+  btnSubmit.addEventListener("click", async () => {
+    const email = emailEl.value.trim();
+    const password = passEl.value.trim();
+
+    if (!email) return alert("Please enter your email.");
+    if (!password || password.length < 6) return alert("Password must be at least 6 characters.");
+
+    try{
+      if (mode === "login"){
+        say("Signing in...");
+        const cred = await signInWithEmailAndPassword(auth, email, password);
+        await ensureUserDoc(cred.user, "student");
+        say("Signed in ✅ Redirecting...");
+        location.href = "/app.html";
+      } else {
+        const role = getSelectedRole();
+        say("Creating account...");
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        await ensureUserDoc(cred.user, role);
+        say("Account created ✅ Redirecting...");
+        location.href = "/app.html";
+      }
+    } catch (e){
+      say("Error: " + (e?.message || e));
+      alert(e?.message || e);
+    }
+  });
+
+  btnForgot.addEventListener("click", async () => {
+    const email = emailEl.value.trim();
+    if (!email) return alert("Enter your email first.");
+    try{
+      say("Sending password reset email...");
+      await sendPasswordResetEmail(auth, email);
+      say("Reset email sent ✅");
+      alert("Password reset email sent. Check inbox/spam.");
+    } catch (e){
+      say("Error: " + (e?.message || e));
+      alert(e?.message || e);
+    }
+  });
+
+  btnGoogle.addEventListener("click", async ()=>{
+    try{
+      say("Opening Google sign-in...");
+      const provider = new GoogleAuthProvider();
+      const cred = await signInWithPopup(auth, provider);
+      await ensureUserDoc(cred.user, "student");
+      say("Signed in with Google ✅ Redirecting...");
+      location.href = "/app.html";
+    }catch(e){
+      say("Error: " + (e?.message || e));
+      alert(e?.message || e);
+    }
+  });
+
+  setMode("login");
+</script>
+
+</body>
+</html>

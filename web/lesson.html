@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lessons | Universal Edu Platform</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+
+<body>
+
+<header>
+  <div>
+    <div class="brand">Universal Edu Platform</div>
+    <div class="muted" style="font-size:13px;">Lessons Manager</div>
+  </div>
+
+  <div class="row">
+    <a class="btn ghost" href="/app.html">← Back</a>
+    <a class="btn ghost" href="/index.html">Home</a>
+    <button class="btn danger" id="btnLogout">Logout</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div id="noCourse" class="card" style="display:none;">
+    <h2>Missing courseId</h2>
+    <p class="muted">Open a course from the dashboard.</p>
+    <a class="btn" href="/app.html">Go to Courses</a>
+  </div>
+
+  <div id="main" style="display:none;">
+
+    <section class="card">
+      <div class="split">
+        <div>
+          <h1 id="courseTitle">Loading...</h1>
+          <div id="courseDesc" class="muted"></div>
+          <div class="note" id="roleNote" style="margin-top:8px;">Loading role...</div>
+        </div>
+        <span class="pill" id="userPill">Checking session...</span>
+      </div>
+    </section>
+
+    <section class="grid" style="grid-template-columns:1fr 1fr; margin-top:20px;">
+      <div class="card" id="editorCard">
+        <h2>Add / Edit Lesson</h2>
+
+        <label class="muted">Lesson Title</label>
+        <input id="lessonTitle" />
+
+        <label class="muted" style="margin-top:10px;">YouTube Link (optional)</label>
+        <input id="lessonYoutube" />
+
+        <label class="muted" style="margin-top:10px;">Notes</label>
+        <textarea id="lessonNotes" rows="8"></textarea>
+
+        <div class="row" style="margin-top:12px;">
+          <button class="btn" id="btnSave">Save</button>
+          <button class="btn ghost" id="btnReset">Reset</button>
+          <button class="btn danger" id="btnDelete" style="display:none;">Delete</button>
+        </div>
+
+        <pre id="out" class="item" style="margin-top:12px;">Ready.</pre>
+      </div>
+
+      <div class="card">
+        <div class="split">
+          <h2>Lessons</h2>
+          <button class="btn ghost" id="btnNew">New</button>
+        </div>
+
+        <div id="list" class="list">
+          <div class="item muted">Loading…</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+</div>
+
+<script type="module">
+import { auth, db } from "./firebase.js";
+import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+import {
+  doc, getDoc, collection, addDoc, updateDoc, deleteDoc,
+  onSnapshot, query, where, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+const courseId = new URL(location.href).searchParams.get("courseId");
+
+const noCourse = document.getElementById("noCourse");
+const main = document.getElementById("main");
+const userPill = document.getElementById("userPill");
+const btnLogout = document.getElementById("btnLogout");
+
+const courseTitleEl = document.getElementById("courseTitle");
+const courseDescEl = document.getElementById("courseDesc");
+const roleNote = document.getElementById("roleNote");
+
+const lessonTitle = document.getElementById("lessonTitle");
+const lessonYoutube = document.getElementById("lessonYoutube");
+const lessonNotes = document.getElementById("lessonNotes");
+
+const btnSave = document.getElementById("btnSave");
+const btnReset = document.getElementById("btnReset");
+const btnDelete = document.getElementById("btnDelete");
+const btnNew = document.getElementById("btnNew");
+
+const list = document.getElementById("list");
+const out = document.getElementById("out");
+
+let uid = null;
+let role = "student";
+let lessons = [];
+let activeLessonId = null;
+
+const say = (m)=> out.textContent = m;
+
+if (!courseId) noCourse.style.display = "block";
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    location.href = "/auth.html";
+    return;
+  }
+
+  uid = user.uid;
+  userPill.textContent = user.email || "Signed in";
+
+  if (!courseId) return;
+
+  // load role
+  const uSnap = await getDoc(doc(db, "users", uid));
+  role = uSnap.exists() ? (uSnap.data().role || "student") : "student";
+
+  main.style.display = "block";
+  await loadCourse();
+  listenLessons();
+
+  if (role !== "teacher"){
+    roleNote.textContent = "Student mode: read-only (cannot add/edit lessons).";
+    lockEditor();
+  } else {
+    roleNote.textContent = "Teacher mode: you can create and edit lessons.";
+  }
+});
+
+btnLogout.addEventListener("click", async () => {
+  await signOut(auth);
+  location.href = "/auth.html";
+});
+
+async function loadCourse(){
+  const snap = await getDoc(doc(db,"courses",courseId));
+  if(!snap.exists()) {
+    courseTitleEl.textContent = "Course not found";
+    courseDescEl.textContent = "";
+    return;
+  }
+  const data = snap.data();
+  courseTitleEl.textContent = data.title || "Untitled";
+  courseDescEl.textContent = data.description || "No description.";
+}
+
+function listenLessons(){
+  const q = query(
+    collection(db,"lessons"),
+    where("courseId","==",courseId)
+  );
+
+  onSnapshot(q, (snap)=>{
+    lessons = snap.docs.map(d=>({id:d.id,...d.data()}));
+
+    lessons.sort((a,b)=>{
+      const ta = a.createdAt?.toMillis?.() || 0;
+      const tb = b.createdAt?.toMillis?.() || 0;
+      return tb - ta;
+    });
+
+    render();
+  }, (err)=>{
+    list.innerHTML = `<div class="item">Error: ${escapeHtml(err?.message || err)}</div>`;
+  });
+}
+
+function render(){
+  if(!lessons.length){
+    list.innerHTML = `<div class="item muted">No lessons yet.</div>`;
+    return;
+  }
+
+  list.innerHTML = lessons.map(l=>`
+    <div class="item">
+      <div class="split">
+        <div style="min-width:0;">
+          <div style="font-weight:900; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+            ${escapeHtml(l.title || "Untitled")}
+          </div>
+          <div class="muted" style="margin-top:4px;">
+            ${escapeHtml((l.notes||"").slice(0,120))}
+          </div>
+        </div>
+        <div class="row">
+          <button class="btn ghost" onclick="loadLesson('${l.id}')">${role === "teacher" ? "Edit" : "View"}</button>
+        </div>
+      </div>
+    </div>
+  `).join("");
+}
+
+function escapeHtml(s=""){
+  return String(s).replace(/[<>&]/g, "");
+}
+
+window.loadLesson = function(id){
+  const l = lessons.find(x=>x.id===id);
+  if(!l) return;
+
+  activeLessonId = id;
+  lessonTitle.value = l.title||"";
+  lessonYoutube.value = l.youtube||"";
+  lessonNotes.value = l.notes||"";
+
+  btnDelete.style.display = (role === "teacher") ? "inline-flex" : "none";
+  say(role === "teacher" ? "Editing lesson..." : "Viewing lesson...");
+}
+
+function lockEditor(){
+  lessonTitle.disabled = true;
+  lessonYoutube.disabled = true;
+  lessonNotes.disabled = true;
+  btnSave.disabled = true;
+  btnReset.disabled = true;
+  btnDelete.disabled = true;
+  btnNew.disabled = true;
+  say("Read-only ✅");
+}
+
+btnSave.addEventListener("click", async ()=>{
+  if (role !== "teacher") return alert("Student accounts cannot edit lessons.");
+
+  const title = lessonTitle.value.trim();
+  if(!title) return alert("Enter lesson title");
+
+  try{
+    if(!activeLessonId){
+      await addDoc(collection(db,"lessons"),{
+        uid,
+        courseId,
+        title,
+        youtube: lessonYoutube.value.trim(),
+        notes: lessonNotes.value.trim(),
+        createdAt: serverTimestamp()
+      });
+      say("Saved ✅");
+    }else{
+      await updateDoc(doc(db,"lessons",activeLessonId),{
+        title,
+        youtube: lessonYoutube.value.trim(),
+        notes: lessonNotes.value.trim(),
+        updatedAt: serverTimestamp()
+      });
+      say("Updated ✅");
+    }
+    reset();
+  } catch(e){
+    alert(e?.message || e);
+    say("Error: " + (e?.message || e));
+  }
+});
+
+btnDelete.addEventListener("click", async ()=>{
+  if (role !== "teacher") return;
+  if(!activeLessonId) return;
+
+  const ok = confirm("Delete this lesson?");
+  if (!ok) return;
+
+  try{
+    await deleteDoc(doc(db,"lessons",activeLessonId));
+    reset();
+  } catch(e){
+    alert(e?.message || e);
+    say("Error: " + (e?.message || e));
+  }
+});
+
+btnReset.addEventListener("click", reset);
+btnNew.addEventListener("click", reset);
+
+function reset(){
+  activeLessonId=null;
+  lessonTitle.value="";
+  lessonYoutube.value="";
+  lessonNotes.value="";
+  btnDelete.style.display="none";
+  say("Ready.");
+}
+</script>
+
+</body>
+</html>

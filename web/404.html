@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>404 | Universal Edu Platform</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Page not found</h1>
+      <p class="muted" style="line-height:1.6;">
+        This app uses deep links (example: <b>/lesson.html?courseId=...</b>).  
+        If you refreshed a deep link, Firebase Hosting may route here.
+      </p>
+
+      <div class="hr"></div>
+
+      <p class="muted">Choose where to go:</p>
+      <div class="row" style="margin-top:10px;">
+        <a class="btn" href="/auth.html">Sign In</a>
+        <a class="btn ghost" href="/app.html">Dashboard</a>
+        <a class="btn ghost" href="/index.html">Home</a>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="note">
+        Tip: If you expect a specific page, copy the URL and open it after signing in.
+      </div>
+    </div>
+  </div>
+
+<script>
+  // Optional helper: if URL contained a ?query we try to push user to auth first
+  // (keeps things simple without complex rewrite rules).
+</script>
+
+</body>
+</html>
