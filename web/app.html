@@ -12,7 +12,7 @@
 <header>
   <div>
     <div class="brand">Universal Edu Platform</div>
-    <div class="muted" style="font-size:13px;">Course Dashboard</div>
+    <div class="muted" style="font-size:13px;">Smart Learning Dashboard</div>
   </div>
 
   <div class="row">
@@ -24,26 +24,67 @@
 
 <div class="wrap">
 
+  <section class="hero">
+    <div class="hero-content">
+      <div class="hero-badge">SMART EDUCATION PLATFORM</div>
+
+      <h1>Learn, teach, monitor progress, and manage courses in one place.</h1>
+
+      <p>
+        Universal Edu Platform connects students, parents, teachers, and schools with
+        course tools, progress tracking, AI tutoring, and a clean digital learning workspace.
+      </p>
+
+      <div class="row" style="margin-top:18px;">
+        <a class="btn" href="/lesson.html">Open Lessons</a>
+        <a class="btn ghost" href="/members.html">Manage Members</a>
+      </div>
+    </div>
+  </section>
+
+  <section
+    class="grid"
+    style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); margin-bottom:25px;"
+  >
+    <div class="card">
+      <div class="muted">Active Courses</div>
+      <h2 id="heroCourses">0</h2>
+    </div>
+
+    <div class="card">
+      <div class="muted">Learning Mode</div>
+      <h2>AI Ready</h2>
+    </div>
+
+    <div class="card">
+      <div class="muted">Workspace</div>
+      <h2 id="heroRole">Loading</h2>
+    </div>
+
+    <div class="card">
+      <div class="muted">Platform Status</div>
+      <h2 class="ok">Online</h2>
+    </div>
+  </section>
+
   <section class="grid" style="grid-template-columns: 1.2fr .8fr;">
-    <!-- LEFT -->
     <div class="card">
       <div class="split">
-        <h1 style="font-size:28px;">Dashboard</h1>
+        <h1 style="font-size:32px;">Education Dashboard</h1>
         <span class="pill" id="userPill">Checking session…</span>
       </div>
 
-      <p class="muted" style="margin-top:10px; line-height:1.6;" id="roleNote">Loading...</p>
+      <p class="muted" style="margin-top:10px; line-height:1.7;" id="roleNote">Loading...</p>
 
       <div class="hr"></div>
 
-      <!-- TEACHER -->
       <div id="teacherPanel" style="display:none;">
         <h3>Create a new course</h3>
 
         <label class="muted" for="courseTitle" style="margin-top:10px;">Course title</label>
         <input id="courseTitle" placeholder="e.g. Grade 10 Biology" />
 
-        <label class="muted" for="courseDesc" style="margin-top:10px;">Short description (optional)</label>
+        <label class="muted" for="courseDesc" style="margin-top:10px;">Short description</label>
         <textarea id="courseDesc" rows="3" placeholder="What is this course about?"></textarea>
 
         <div class="row" style="margin-top:12px;">
@@ -58,7 +99,6 @@
         <div class="hr"></div>
       </div>
 
-      <!-- STUDENT -->
       <div id="studentPanel" style="display:none;">
         <h3>Join a course</h3>
 
@@ -80,24 +120,35 @@
       <pre id="out" class="item" style="white-space:pre-wrap;">Ready.</pre>
     </div>
 
-    <!-- RIGHT -->
     <div class="card">
-      <h2 style="margin-bottom:6px;">Quick Overview</h2>
-      <p class="muted" style="line-height:1.6;">
-        Teachers create courses. Students join using a code — no index needed.
+      <h2 style="margin-bottom:10px;">Platform Overview</h2>
+
+      <p class="muted" style="line-height:1.7;">
+        Manage courses, track students, monitor learning progress, create lessons,
+        invite members and build a complete online education experience from one dashboard.
       </p>
 
       <div class="hr"></div>
 
       <div class="grid" style="grid-template-columns:1fr 1fr;">
         <div class="item">
-          <div class="muted" style="font-size:12px;">Total Courses</div>
+          <div class="muted" style="font-size:12px;">Active Courses</div>
           <div style="font-size:26px; font-weight:900;" id="statCourses">0</div>
         </div>
+
         <div class="item">
-          <div class="muted" style="font-size:12px;">Role</div>
+          <div class="muted" style="font-size:12px;">Account Role</div>
           <div style="font-size:16px; font-weight:900;" id="statRole">—</div>
         </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="list">
+        <div class="item">✅ Student Learning System</div>
+        <div class="item">✅ Teacher Course Tools</div>
+        <div class="item">✅ Parent Monitoring Ready</div>
+        <div class="item">✅ School Admin Ready</div>
       </div>
     </div>
   </section>
@@ -106,6 +157,7 @@
     <div class="card">
       <div class="split">
         <h2 id="listTitle">Courses</h2>
+
         <div class="row">
           <input id="search" placeholder="Search courses…" style="max-width:260px;" />
           <button class="btn ghost" id="btnRefresh">Refresh</button>
@@ -119,7 +171,7 @@
       </div>
 
       <div class="note" style="margin-top:12px;">
-        Click <b>Open</b> to manage/view lessons. Teachers can also open <b>Members</b>.
+        Click <b>Open</b> to manage or view lessons. Teachers can also open <b>Members</b>.
       </div>
     </div>
   </section>
@@ -143,6 +195,8 @@
   const roleNote = document.getElementById("roleNote");
   const statRole = document.getElementById("statRole");
   const statCourses = document.getElementById("statCourses");
+  const heroCourses = document.getElementById("heroCourses");
+  const heroRole = document.getElementById("heroRole");
 
   const courseTitle = document.getElementById("courseTitle");
   const courseDesc = document.getElementById("courseDesc");
@@ -166,19 +220,29 @@
   let unsub = null;
 
   const say = (m) => out.textContent = m;
-  const esc = (s="") => String(s).replace(/[<>&]/g, "");
+  const esc = (s = "") => String(s).replace(/[<>&]/g, "");
   const fmtDate = (ts) => {
-    try{
+    try {
       if (!ts) return "—";
       const d = ts.toDate ? ts.toDate() : new Date(ts);
       return d.toLocaleString();
-    } catch { return "—"; }
+    } catch {
+      return "—";
+    }
   };
 
-  function makeCode(len=8){
+  function updateCourseStats(){
+    const total = String(allCourses.length);
+    statCourses.textContent = total;
+    heroCourses.textContent = total;
+  }
+
+  function makeCode(len = 8){
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let s = "";
-    for(let i=0;i<len;i++) s += chars[Math.floor(Math.random()*chars.length)];
+    for(let i = 0; i < len; i++){
+      s += chars[Math.floor(Math.random() * chars.length)];
+    }
     return s;
   }
 
@@ -191,21 +255,22 @@
     uid = user.uid;
     userPill.textContent = user.email || "Signed in";
 
-    // role from users/{uid}
     const uSnap = await getDoc(doc(db, "users", uid));
     role = uSnap.exists() ? (uSnap.data().role || "student") : "student";
+
     statRole.textContent = role.toUpperCase();
+    heroRole.textContent = role.toUpperCase();
 
     if (role === "teacher"){
       teacherPanel.style.display = "block";
       studentPanel.style.display = "none";
-      roleNote.textContent = "You are a TEACHER. Create courses and share a join code with students.";
+      roleNote.textContent = "You are signed in as a teacher. Create courses, share join codes and manage your learning workspace.";
       listTitle.textContent = "Your Courses";
       listenTeacherCourses();
     } else {
       teacherPanel.style.display = "none";
       studentPanel.style.display = "block";
-      roleNote.textContent = "You are a STUDENT. Join courses using a code from your teacher.";
+      roleNote.textContent = "You are signed in as a student. Join courses using a code from your teacher and continue learning.";
       listTitle.textContent = "Enrolled Courses";
       listenStudentEnrollments();
     }
@@ -218,61 +283,65 @@
     location.href = "/auth.html";
   });
 
-  // TEACHER courses
   function listenTeacherCourses(){
     if (unsub) unsub();
+
     const q = query(collection(db, "courses"), where("uid", "==", uid));
+
     unsub = onSnapshot(q, (snap) => {
       allCourses = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      allCourses.sort((a,b)=>{
+
+      allCourses.sort((a, b) => {
         const ta = a.createdAt?.toMillis?.() || 0;
         const tb = b.createdAt?.toMillis?.() || 0;
         return tb - ta;
       });
-      statCourses.textContent = String(allCourses.length);
+
+      updateCourseStats();
       renderList();
     }, (err) => {
       list.innerHTML = `<div class="item">Error: ${esc(err?.message || err)}</div>`;
     });
   }
 
-  // STUDENT enrollments
   function listenStudentEnrollments(){
     if (unsub) unsub();
+
     const q = query(collection(db, "users", uid, "enrollments"));
+
     unsub = onSnapshot(q, async (snap) => {
       const courseIds = snap.docs.map(d => d.id);
-
       const courses = [];
+
       for (const cid of courseIds){
         const cs = await getDoc(doc(db, "courses", cid));
         if (cs.exists()) courses.push({ id: cid, ...cs.data() });
       }
 
-      courses.sort((a,b)=>{
+      courses.sort((a, b) => {
         const ta = a.createdAt?.toMillis?.() || 0;
         const tb = b.createdAt?.toMillis?.() || 0;
         return tb - ta;
       });
 
       allCourses = courses;
-      statCourses.textContent = String(allCourses.length);
+      updateCourseStats();
       renderList();
     }, (err) => {
       list.innerHTML = `<div class="item">Error: ${esc(err?.message || err)}</div>`;
     });
   }
 
-  // Create course + invite
-  btnCreate?.addEventListener("click", async ()=>{
+  btnCreate?.addEventListener("click", async () => {
     const title = courseTitle.value.trim();
     const description = courseDesc.value.trim();
+
     if (!title) return alert("Enter a course title.");
 
     btnCreate.disabled = true;
     btnCreate.textContent = "Creating...";
 
-    try{
+    try {
       const code = makeCode(8);
 
       const courseRef = await addDoc(collection(db, "courses"), {
@@ -290,7 +359,6 @@
         createdAt: serverTimestamp()
       });
 
-      // teacher membership doc
       await setDoc(doc(db, "courses", courseRef.id, "members", uid), {
         uid,
         role: "teacher",
@@ -302,7 +370,7 @@
 
       courseTitle.value = "";
       courseDesc.value = "";
-    } catch(e){
+    } catch(e) {
       alert(e?.message || e);
       say("Error: " + (e?.message || e));
     } finally {
@@ -311,20 +379,23 @@
     }
   });
 
-  btnClear?.addEventListener("click", ()=>{
-    courseTitle.value=""; courseDesc.value=""; courseTitle.focus();
+  btnClear?.addEventListener("click", () => {
+    courseTitle.value = "";
+    courseDesc.value = "";
+    courseTitle.focus();
   });
 
-  // Student join
-  btnJoin?.addEventListener("click", async ()=>{
+  btnJoin?.addEventListener("click", async () => {
     const code = joinCode.value.trim().toUpperCase();
+
     if (!code) return alert("Enter a join code.");
 
     btnJoin.disabled = true;
     btnJoin.textContent = "Joining...";
 
-    try{
+    try {
       const inviteSnap = await getDoc(doc(db, "course_invites", code));
+
       if (!inviteSnap.exists()){
         alert("Invalid code. Ask your teacher for the correct code.");
         say("Invalid code.");
@@ -348,7 +419,7 @@
       say(`Joined ✅\nCourse: ${invite.title}\nNow open it from your list.`);
       alert("Joined course: " + invite.title);
       joinCode.value = "";
-    } catch(e){
+    } catch(e) {
       alert(e?.message || e);
       say("Error: " + (e?.message || e));
     } finally {
@@ -357,8 +428,9 @@
     }
   });
 
-  btnJoinClear?.addEventListener("click", ()=>{
-    joinCode.value=""; joinCode.focus();
+  btnJoinClear?.addEventListener("click", () => {
+    joinCode.value = "";
+    joinCode.focus();
   });
 
   function openCourse(courseId){
@@ -371,13 +443,14 @@
 
   async function removeCourse(courseId){
     if (role !== "teacher") return alert("Only teachers can delete.");
+
     const ok = confirm("Delete this course?");
     if (!ok) return;
 
-    try{
+    try {
       await deleteDoc(doc(db, "courses", courseId));
       say("Deleted ✅");
-    } catch(e){
+    } catch(e) {
       alert(e?.message || e);
       say("Error: " + (e?.message || e));
     }
@@ -385,9 +458,10 @@
 
   function renderList(){
     const qtxt = (search.value || "").trim().toLowerCase();
-    const filtered = allCourses.filter(c=>{
-      const t = (c.title||"").toLowerCase();
-      const d = (c.description||"").toLowerCase();
+
+    const filtered = allCourses.filter(c => {
+      const t = (c.title || "").toLowerCase();
+      const d = (c.description || "").toLowerCase();
       return !qtxt || t.includes(qtxt) || d.includes(qtxt);
     });
 
@@ -396,9 +470,9 @@
       return;
     }
 
-    list.innerHTML = filtered.map(c=>{
-      const title = esc(c.title||"Untitled");
-      const desc = esc(c.description||"");
+    list.innerHTML = filtered.map(c => {
+      const title = esc(c.title || "Untitled");
+      const desc = esc(c.description || "");
       const created = fmtDate(c.createdAt);
 
       return `
@@ -408,11 +482,16 @@
               <div style="font-weight:900; font-size:16px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                 ${title}
               </div>
+
               <div class="muted" style="margin-top:4px; line-height:1.4;">
                 ${desc ? desc : "No description."}
               </div>
-              <div class="note" style="margin-top:6px;">Created: ${esc(created)}</div>
+
+              <div class="note" style="margin-top:6px;">
+                Created: ${esc(created)}
+              </div>
             </div>
+
             <div class="row">
               <button class="btn" data-open="${c.id}">Open</button>
               ${role === "teacher" ? `<button class="btn ghost" data-mem="${c.id}">Members</button>` : ``}
@@ -423,16 +502,16 @@
       `;
     }).join("");
 
-    list.querySelectorAll("[data-open]").forEach(b=>{
-      b.addEventListener("click", ()=>openCourse(b.getAttribute("data-open")));
+    list.querySelectorAll("[data-open]").forEach(b => {
+      b.addEventListener("click", () => openCourse(b.getAttribute("data-open")));
     });
 
-    list.querySelectorAll("[data-mem]").forEach(b=>{
-      b.addEventListener("click", ()=>openMembers(b.getAttribute("data-mem")));
+    list.querySelectorAll("[data-mem]").forEach(b => {
+      b.addEventListener("click", () => openMembers(b.getAttribute("data-mem")));
     });
 
-    list.querySelectorAll("[data-del]").forEach(b=>{
-      b.addEventListener("click", ()=>removeCourse(b.getAttribute("data-del")));
+    list.querySelectorAll("[data-del]").forEach(b => {
+      b.addEventListener("click", () => removeCourse(b.getAttribute("data-del")));
     });
   }
 
